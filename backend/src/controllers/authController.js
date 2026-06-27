@@ -32,19 +32,20 @@ const buildAuthResponse = (user, rememberMe) => {
 };
 
 export const login = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, rememberMe = false } = req.body;
 
   validateEmail(email);
   validatePassword(password);
 
   const user = await getActiveUserByEmail(email);
   await verifyPassword(user, password);
-  await issueOtpForUser(user, "LOGIN");
+
+  user.lastLogin = new Date();
+  await user.save();
 
   res.json({
-    message: "OTP sent to your registered email.",
-    email: user.email,
-    otpExpiresInSeconds: 300
+    message: "Login successful.",
+    ...buildAuthResponse(user, Boolean(rememberMe))
   });
 });
 

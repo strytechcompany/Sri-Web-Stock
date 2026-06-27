@@ -4,7 +4,6 @@ import Dashboard from "./pages/Dashboard.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import Login from "./pages/Login.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
-import VerifyOTP from "./pages/VerifyOTP.jsx";
 import StockManagement from "./pages/StockManagement.jsx";
 import AddStock from "./pages/AddStock.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -14,7 +13,6 @@ const App = () => (
   <Routes>
     <Route element={<AuthLayout />}>
       <Route path="/login" element={<Login />} />
-      <Route path="/verify-otp" element={<VerifyOTP />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
     </Route>

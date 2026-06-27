@@ -6,7 +6,7 @@ import Alert from "../components/Alert.jsx";
 import AuthCard from "../components/AuthCard.jsx";
 import FormInput from "../components/FormInput.jsx";
 import { loginUser } from "../services/authService.js";
-import { saveOtpContext } from "../utils/authStorage.js";
+import { saveSession } from "../utils/authStorage.js";
 import { getErrorMessage } from "../utils/getErrorMessage.js";
 
 const Login = () => {
@@ -32,19 +32,20 @@ const Login = () => {
     setAlert(null);
 
     try {
-      await loginUser({
+      const response = await loginUser({
         email: values.email,
-        password: values.password
+        password: values.password,
+        rememberMe: values.rememberMe
       });
 
-      saveOtpContext({
-        email: values.email,
-        purpose: "LOGIN",
-        rememberMe: values.rememberMe,
-        sentAt: Date.now()
+      saveSession({
+        token: response.token,
+        expiresIn: response.expiresIn,
+        user: response.user,
+        rememberMe: values.rememberMe
       });
 
-      navigate("/verify-otp");
+      navigate("/dashboard");
     } catch (error) {
       setAlert({
         type: "error",
@@ -56,7 +57,7 @@ const Login = () => {
   };
 
   return (
-    <AuthCard title="Authorized Staff Login" subtitle="Sign in with your email, password, and one-time verification code.">
+    <AuthCard title="Authorized Staff Login" subtitle="Sign in with your registered email and password.">
       <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
         <Alert type="success" message={location.state?.successMessage} />
         <Alert type={alert?.type} message={alert?.message} />
@@ -126,7 +127,7 @@ const Login = () => {
           disabled={loading}
           className="w-full rounded-2xl bg-mocha-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-mocha-800 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {loading ? "Sending OTP..." : "Login"}
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
     </AuthCard>
