@@ -12,7 +12,7 @@ const PAGE_HEIGHT_MM = 101.6;
 const LABEL_WIDTH_MM = 101.6;   // landscape: same value as portrait height
 const LABEL_HEIGHT_MM = 29;     // landscape: same value as portrait width
 const PRINT_BLOCK_X_MM = 51;    // landscape X where the printable content starts
-const PRINT_BLOCK_Y_MM = 7.5;   // landscape Y (from top edge of label)
+const PRINT_BLOCK_Y_MM = 7;     // landscape Y (from top edge of label)
 const QR_SIZE_MM = 12;
 const TEXT_WIDTH_MM = 39;
 const PX_PER_MM = 20;
@@ -150,36 +150,29 @@ const createPageDataUrl = async (label) => {
   return pageCanvas.toDataURL("image/png");
 };
 
-// Compact HTML template — NO whitespace text nodes inside <body>.
-// Any in-flow text node (even a newline) adds height to the document,
-// causing the browser to generate a second partial page per print job.
-// That stub page makes the printer advance extra paper, shifting every
-// subsequent label relative to the first.
-const buildPrintHtml = (pageDataUrl) => {
+// All labels are combined into ONE print job with page-break-after so the
+// printer never double-advances between separate print() calls.
+const buildPrintHtml = (pageDataUrls) => {
   const pw = PAGE_WIDTH_MM;
   const ph = PAGE_HEIGHT_MM;
   const imgW = mmToPx(pw);
   const imgH = mmToPx(ph);
+  const pages = pageDataUrls.map((url) =>
+    `<div class="p"><img class="i" src="${url}" alt="" width="${imgW}" height="${imgH}"></div>`
+  ).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title></title><style>` +
     `@page{size:${pw}mm ${ph}mm;margin:0}` +
     `*{box-sizing:border-box;margin:0;padding:0}` +
-    // Exact height + overflow:hidden — no in-flow content can push body
-    // beyond one label height, preventing a spurious second print page.
-    `html{width:${pw}mm;height:${ph}mm;max-height:${ph}mm;overflow:hidden}` +
-    `body{width:${pw}mm;height:${ph}mm;max-height:${ph}mm;overflow:hidden;` +
-    `-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
+    `html,body{width:${pw}mm;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
     `.p{position:relative;display:block;width:${pw}mm;height:${ph}mm;` +
-    `min-width:${pw}mm;max-width:${pw}mm;min-height:${ph}mm;max-height:${ph}mm;overflow:hidden}` +
+    `min-height:${ph}mm;max-height:${ph}mm;overflow:hidden;page-break-after:always}` +
+    `.p:last-child{page-break-after:avoid}` +
     `.i{position:absolute;left:0;top:0;width:${pw}mm;height:${ph}mm;` +
     `min-width:${pw}mm;max-width:${pw}mm;min-height:${ph}mm;max-height:${ph}mm;` +
     `display:block;image-rendering:pixelated;image-rendering:crisp-edges;` +
     `-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
-    // Eliminate all margin/padding that Chrome might apply to the root.
     `@media print{html,body{margin:0;padding:0}}` +
-    `</style></head>` +
-    // No whitespace between tags — prevents in-flow text nodes that add height.
-    `<body><div class="p"><img class="i" src="${pageDataUrl}" alt="" width="${imgW}" height="${imgH}"></div></body>` +
-    `</html>`;
+    `</style></head><body>${pages}</body></html>`;
 };
 
 const waitForRender = async (doc) => {
@@ -200,25 +193,18 @@ const waitForRender = async (doc) => {
       }
     })
   ));
-  // Extra compositor frame flush before Chrome opens the print dialog.
   await new Promise((r) => setTimeout(r, 300));
 };
 
-const printOneLabel = async (pageDataUrl) => {
+const printAllLabels = async (pageDataUrls) => {
   const iframe = document.createElement("iframe");
-  // Give the iframe a viewport that matches the label exactly.
-  // A 0×0 viewport means Chrome has no layout surface to render into;
-  // the content tree is built but the compositor may skip it when the
-  // print pipeline asks for a rasterised frame, producing a blank page.
-  // With a viewport set to the actual label dimensions the render always
-  // produces content. visibility:hidden keeps it off-screen for the user.
   iframe.style.cssText =
     `position:fixed;top:0;left:0;width:${PAGE_WIDTH_MM}mm;height:${PAGE_HEIGHT_MM}mm;border:none;visibility:hidden;overflow:hidden;`;
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write(buildPrintHtml(pageDataUrl));
+  doc.write(buildPrintHtml(pageDataUrls));
   doc.close();
 
   await waitForRender(doc);
@@ -234,7 +220,6 @@ const printOneLabel = async (pageDataUrl) => {
     iframe.contentWindow.onafterprint = finish;
     iframe.contentWindow.focus();
     iframe.contentWindow.print();
-    // Safety: remove iframe after 2 min if onafterprint never fires.
     setTimeout(finish, 120000);
   });
 };
@@ -248,9 +233,7 @@ const prepareLabel = async (payload) => {
 
 export const printStockLabels = async (payloads) => {
   const prepared = await Promise.all(payloads.map(prepareLabel));
-  for (const label of prepared) {
-    await printOneLabel(label.pageDataUrl);
-  }
+  await printAllLabels(prepared.map((l) => l.pageDataUrl));
   return prepared;
 };
 
