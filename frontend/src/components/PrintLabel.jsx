@@ -11,11 +11,11 @@ const PAGE_WIDTH_MM = 29;
 const PAGE_HEIGHT_MM = 101.6;
 const LABEL_WIDTH_MM = 101.6;   // landscape: same value as portrait height
 const LABEL_HEIGHT_MM = 29;     // landscape: same value as portrait width
-const PRINT_BLOCK_X_MM = 51;    // landscape X where the printable content starts
+const PRINT_BLOCK_X_MM = 50;    // landscape X where the printable content starts
 const PRINT_BLOCK_Y_MM = 7;     // landscape Y (from top edge of label)
 const QR_SIZE_MM = 12;
 const TEXT_WIDTH_MM = 39;
-const PX_PER_MM = 20;
+const PX_PER_MM = 40;
 
 const mmToPx = (mm) => Math.round(mm * PX_PER_MM);
 
@@ -64,10 +64,7 @@ const drawText = (ctx, text, x, y, maxW, fontPx) => {
   ctx.beginPath();
   ctx.rect(x, y - fontPx, maxW, fontPx * 1.25);
   ctx.clip();
-  // Triple-fill sharpens edges on thermal bitmap output.
-  ctx.fillText(`${text ?? ""}`, x, y);
-  ctx.fillText(`${text ?? ""}`, x, y);
-  ctx.fillText(`${text ?? ""}`, x, y);
+  ctx.fillText(`${text ?? ""}`, x, y, maxW);
   ctx.restore();
 };
 
@@ -127,7 +124,7 @@ const createPageDataUrl = async (label) => {
   });
 
   // Binarise the entire label (text anti-aliasing → pure black edges).
-  forceBlackAndWhite(lCtx, lw, lh, 245);
+  forceBlackAndWhite(lCtx, lw, lh, 225);
 
   // ── Portrait page canvas (PAGE_WIDTH_MM × PAGE_HEIGHT_MM) ───────────────
   // Rotate the landscape canvas 90° CW into portrait layout.
@@ -150,8 +147,8 @@ const createPageDataUrl = async (label) => {
   return pageCanvas.toDataURL("image/png");
 };
 
-// All labels are combined into ONE print job with page-break-after so the
-// printer never double-advances between separate print() calls.
+// All labels are combined into ONE print job. Break before labels after the
+// first so the browser does not add a trailing blank feed after the last label.
 const buildPrintHtml = (pageDataUrls) => {
   const pw = PAGE_WIDTH_MM;
   const ph = PAGE_HEIGHT_MM;
@@ -160,18 +157,21 @@ const buildPrintHtml = (pageDataUrls) => {
   const pages = pageDataUrls.map((url) =>
     `<div class="p"><img class="i" src="${url}" alt="" width="${imgW}" height="${imgH}"></div>`
   ).join('');
+  const totalH = ph * pageDataUrls.length;
   return `<!doctype html><html><head><meta charset="utf-8"><title></title><style>` +
-    `@page{size:${pw}mm ${ph}mm;margin:0}` +
-    `*{box-sizing:border-box;margin:0;padding:0}` +
-    `html,body{width:${pw}mm;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
+    `@page{size:${pw}mm ${ph}mm;margin:0!important}` +
+    `*{box-sizing:border-box;margin:0!important;padding:0!important}` +
+    `html,body{width:${pw}mm;height:${totalH}mm;max-height:${totalH}mm;overflow:hidden!important;` +
+    `-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
     `.p{position:relative;display:block;width:${pw}mm;height:${ph}mm;` +
-    `min-height:${ph}mm;max-height:${ph}mm;overflow:hidden;page-break-after:always}` +
-    `.p:last-child{page-break-after:avoid}` +
+    `min-height:${ph}mm;max-height:${ph}mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid}` +
+    `.p+.p{break-before:page;page-break-before:always}` +
     `.i{position:absolute;left:0;top:0;width:${pw}mm;height:${ph}mm;` +
     `min-width:${pw}mm;max-width:${pw}mm;min-height:${ph}mm;max-height:${ph}mm;` +
     `display:block;image-rendering:pixelated;image-rendering:crisp-edges;` +
     `-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
-    `@media print{html,body{margin:0;padding:0}}` +
+    `@media print{@page{size:${pw}mm ${ph}mm;margin:0!important}` +
+    `html,body{margin:0!important;padding:0!important;width:${pw}mm;height:${totalH}mm;overflow:hidden!important}}` +
     `</style></head><body>${pages}</body></html>`;
 };
 
